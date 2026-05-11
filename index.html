@@ -281,6 +281,12 @@
     <div class="status-dot"></div>
     System Online
   </div>
+  <button
+    onclick="resetConversation()"
+    style="margin-left:12px;padding:6px 14px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;cursor:pointer;"
+    onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent2)'"
+    onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"
+  >Reset</button>
 </header>
 
 <div class="layout">
@@ -378,7 +384,7 @@
 <script>
   // ── State ──────────────────────────────────────────────────────────────
   let activeAgent = 'general';
-  let messageCount = 0;
+  let isSending = false;
 
   const agentMeta = {
     general:  { name: 'General Agent',   icon: '🧠', color: '#5b6ef5' },
@@ -393,13 +399,6 @@
     tools:    { name: 'Tools Agent',     icon: '🔧', color: '#6b7280' },
     security: { name: 'Security Agent',  icon: '🛡️', color: '#f97316' },
   };
-
-  // Placeholder responses — replace with real API calls
-  const mockReplies = [
-    (agent, msg) => `Got it. I'm routing your request through the ${agent.name} pipeline. Stand by while I process: "${msg.slice(0, 60)}${msg.length > 60 ? '…' : ''}"`,
-    (agent)      => `${agent.icon} ${agent.name} here. I've received your task and I'm working on it now. I'll report back shortly with results.`,
-    (agent)      => `Acknowledged. Running the ${agent.name} workflow. This is where the real agent logic will hook in once the backend is wired up.`,
-  ];
 
   // ── Agent switcher ─────────────────────────────────────────────────────
   function selectAgent(el) {
@@ -487,7 +486,8 @@
   async function sendMessage() {
     const input = document.getElementById('msgInput');
     const text  = input.value.trim();
-    if (!text) return;
+    if (!text || isSending) return;
+    isSending = true;
 
     input.value = '';
     autoResize(input);
@@ -495,13 +495,75 @@
     appendMessage('user', text, activeAgent);
     showThinking(activeAgent);
 
-    // TODO: replace this mock with a real fetch() to your agent backend
-    await simulateDelay(900 + Math.random() * 700);
-    removeThinking();
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, agentKey: activeAgent }),
+      });
 
-    const reply = mockReplies[messageCount % mockReplies.length](agentMeta[activeAgent], text);
-    messageCount++;
-    appendMessage('agent', reply, activeAgent);
+      if (!res.ok) {
+        removeThinking();
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        const bubble = appendMessage('agent', `Error: ${err.error}`, activeAgent);
+        bubble.style.color = 'var(--warn)';
+        return;
+      }
+
+      removeThinking();
+      const bubble = appendMessage('agent', '', activeAgent);
+      const chatHistory = document.getElementById('chatHistory');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const payload = JSON.parse(line.slice(6));
+            if (payload.type === 'text') {
+              bubble.textContent += payload.text;
+              chatHistory.scrollTop = chatHistory.scrollHeight;
+            } else if (payload.type === 'error') {
+              bubble.style.color = 'var(--warn)';
+              bubble.textContent = `Error: ${payload.message}`;
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      removeThinking();
+      const bubble = appendMessage('agent', `Connection error: ${err.message}`, activeAgent);
+      bubble.style.color = 'var(--warn)';
+    } finally {
+      isSending = false;
+    }
+  }
+
+  async function resetConversation() {
+    if (isSending) return;
+    await fetch('/reset', { method: 'POST' }).catch(() => {});
+    const history = document.getElementById('chatHistory');
+    history.innerHTML = `
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🤖</div>
+        <h2>What should we build today?</h2>
+        <p>Send a message to the General Agent — it will route your request to the right specialist automatically.</p>
+        <div class="suggestion-chips">
+          <div class="chip" onclick="sendSuggestion(this)">Research a topic for me</div>
+          <div class="chip" onclick="sendSuggestion(this)">Write some code</div>
+          <div class="chip" onclick="sendSuggestion(this)">Analyze this data</div>
+          <div class="chip" onclick="sendSuggestion(this)">Plan a project</div>
+          <div class="chip" onclick="sendSuggestion(this)">What can you do?</div>
+        </div>
+      </div>`;
   }
 
   function sendSuggestion(chip) {
@@ -516,10 +578,6 @@
   function autoResize(el) {
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 180) + 'px';
-  }
-
-  function simulateDelay(ms) {
-    return new Promise(r => setTimeout(r, ms));
   }
 </script>
 </body>
