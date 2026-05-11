@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MassAgent — Command Center</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #161922;
+      --surface2:  #1e2230;
+      --border:    #2a2f3f;
+      --accent:    #5b6ef5;
+      --accent2:   #7c8bff;
+      --text:      #e2e5f0;
+      --muted:     #6b7390;
+      --user-bg:   #1e2a4a;
+      --agent-bg:  #1a1f2e;
+      --success:   #3ecf8e;
+      --warn:      #f59e0b;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .logo {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+
+    header h1 { font-size: 16px; font-weight: 600; letter-spacing: .3px; }
+    header p  { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+    .status-badge {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--success);
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: .4; }
+    }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    aside {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 16px 12px;
+      gap: 6px;
+      overflow-y: auto;
+    }
+
+    .sidebar-label {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 1px; text-transform: uppercase;
+      color: var(--muted);
+      padding: 6px 8px 4px;
+    }
+
+    .agent-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .15s;
+      font-size: 13px;
+    }
+    .agent-item:hover { background: var(--surface2); }
+    .agent-item.active { background: #1e2a4a; color: var(--accent2); }
+
+    .agent-icon {
+      width: 28px; height: 28px; border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+
+    .agent-name { font-weight: 500; }
+    .agent-tag  { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+    /* ── Chat area ── */
+    .chat-wrap {
+      flex: 1;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+      display: flex; flex-direction: column; gap: 20px;
+      scroll-behavior: smooth;
+    }
+    .chat-history::-webkit-scrollbar { width: 5px; }
+    .chat-history::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* ── Messages ── */
+    .msg { display: flex; gap: 12px; max-width: 780px; }
+    .msg.user  { align-self: flex-end; flex-direction: row-reverse; }
+    .msg.agent { align-self: flex-start; }
+
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .msg.user  .avatar { background: var(--accent); }
+    .msg.agent .avatar { background: var(--surface2); border: 1px solid var(--border); }
+
+    .bubble {
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.6;
+      max-width: 680px;
+    }
+    .msg.user  .bubble {
+      background: var(--user-bg);
+      border-top-right-radius: 4px;
+    }
+    .msg.agent .bubble {
+      background: var(--agent-bg);
+      border: 1px solid var(--border);
+      border-top-left-radius: 4px;
+    }
+
+    .meta {
+      font-size: 11px; color: var(--muted);
+      margin-bottom: 5px; display: flex; align-items: center; gap: 6px;
+    }
+    .meta-name { font-weight: 600; color: var(--text); }
+    .sub-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 1px 6px; border-radius: 4px;
+      font-size: 10px; color: var(--accent2);
+    }
+
+    /* ── Thinking indicator ── */
+    .thinking {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      background: var(--agent-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px; border-top-left-radius: 4px;
+      font-size: 13px; color: var(--muted);
+    }
+    .dots span {
+      display: inline-block;
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--muted);
+      margin: 0 1px;
+      animation: bounce .8s ease-in-out infinite;
+    }
+    .dots span:nth-child(2) { animation-delay: .15s; }
+    .dots span:nth-child(3) { animation-delay: .30s; }
+    @keyframes bounce {
+      0%,80%,100% { transform: translateY(0); }
+      40%          { transform: translateY(-5px); }
+    }
+
+    /* ── Input bar ── */
+    .input-bar {
+      padding: 16px 28px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .input-row {
+      display: flex; align-items: flex-end; gap: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 14px;
+      transition: border-color .2s;
+    }
+    .input-row:focus-within { border-color: var(--accent); }
+
+    textarea {
+      flex: 1;
+      background: none; border: none; outline: none;
+      color: var(--text); font-family: inherit; font-size: 14px;
+      resize: none; line-height: 1.5;
+      max-height: 180px;
+      min-height: 22px;
+    }
+    textarea::placeholder { color: var(--muted); }
+
+    .send-btn {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--accent);
+      border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background .15s, transform .1s;
+    }
+    .send-btn:hover   { background: var(--accent2); }
+    .send-btn:active  { transform: scale(.93); }
+    .send-btn svg { width: 16px; height: 16px; fill: white; }
+
+    .hint {
+      text-align: center; font-size: 11px; color: var(--muted);
+      margin-top: 8px;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px; color: var(--muted); padding: 40px;
+    }
+    .empty-icon { font-size: 48px; opacity: .4; }
+    .empty-state h2 { font-size: 18px; color: var(--text); font-weight: 600; }
+    .empty-state p  { font-size: 13px; text-align: center; max-width: 340px; }
+
+    .suggestion-chips {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      justify-content: center; margin-top: 8px;
+    }
+    .chip {
+      padding: 6px 14px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; font-size: 12px; cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--accent2); }
+
+    /* scrollbar */
+    aside::-webkit-scrollbar { width: 4px; }
+    aside::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🤖</div>
+  <div>
+    <h1>MassAgent Command Center</h1>
+    <p>General Orchestrator + 10 Specialized Subagents</p>
+  </div>
+  <div class="status-badge">
+    <div class="status-dot"></div>
+    System Online
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar: agent roster -->
+  <aside>
+    <div class="sidebar-label">Orchestrator</div>
+    <div class="agent-item active" data-agent="general" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#1e2a4a">🧠</div>
+      <div>
+        <div class="agent-name">General Agent</div>
+        <div class="agent-tag">Router & Planner</div>
+      </div>
+    </div>
+
+    <div class="sidebar-label" style="margin-top:8px">Subagents</div>
+
+    <div class="agent-item" data-agent="research" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#1a2d1a">🔍</div>
+      <div><div class="agent-name">Research</div><div class="agent-tag">Web & Data</div></div>
+    </div>
+    <div class="agent-item" data-agent="code" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#1a1a2d">💻</div>
+      <div><div class="agent-name">Code</div><div class="agent-tag">Dev & Debug</div></div>
+    </div>
+    <div class="agent-item" data-agent="writer" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#2d1a1a">✍️</div>
+      <div><div class="agent-name">Writer</div><div class="agent-tag">Content & Copy</div></div>
+    </div>
+    <div class="agent-item" data-agent="analyst" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#2d2a1a">📊</div>
+      <div><div class="agent-name">Analyst</div><div class="agent-tag">Data & Insights</div></div>
+    </div>
+    <div class="agent-item" data-agent="planner" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#1a2d2d">🗂️</div>
+      <div><div class="agent-name">Planner</div><div class="agent-tag">Tasks & Strategy</div></div>
+    </div>
+    <div class="agent-item" data-agent="memory" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#2d1a2d">🧩</div>
+      <div><div class="agent-name">Memory</div><div class="agent-tag">Context & Recall</div></div>
+    </div>
+    <div class="agent-item" data-agent="vision" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#1a2a1a">👁️</div>
+      <div><div class="agent-name">Vision</div><div class="agent-tag">Image & Video</div></div>
+    </div>
+    <div class="agent-item" data-agent="voice" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#2a1a1a">🎙️</div>
+      <div><div class="agent-name">Voice</div><div class="agent-tag">Audio & Speech</div></div>
+    </div>
+    <div class="agent-item" data-agent="tools" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#1a1a1a">🔧</div>
+      <div><div class="agent-name">Tools</div><div class="agent-tag">APIs & Actions</div></div>
+    </div>
+    <div class="agent-item" data-agent="security" onclick="selectAgent(this)">
+      <div class="agent-icon" style="background:#2a1a1f">🛡️</div>
+      <div><div class="agent-name">Security</div><div class="agent-tag">Safety & Audit</div></div>
+    </div>
+  </aside>
+
+  <!-- Main chat -->
+  <div class="chat-wrap">
+    <div class="chat-history" id="chatHistory">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🤖</div>
+        <h2>What should we build today?</h2>
+        <p>Send a message to the General Agent — it will route your request to the right specialist automatically.</p>
+        <div class="suggestion-chips">
+          <div class="chip" onclick="sendSuggestion(this)">Research a topic for me</div>
+          <div class="chip" onclick="sendSuggestion(this)">Write some code</div>
+          <div class="chip" onclick="sendSuggestion(this)">Analyze this data</div>
+          <div class="chip" onclick="sendSuggestion(this)">Plan a project</div>
+          <div class="chip" onclick="sendSuggestion(this)">What can you do?</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <div class="input-row">
+        <textarea
+          id="msgInput"
+          placeholder="Message the General Agent…"
+          rows="1"
+          onkeydown="handleKey(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+        <button class="send-btn" onclick="sendMessage()">
+          <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+      <p class="hint">Enter to send · Shift+Enter for new line</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────
+  let activeAgent = 'general';
+  let messageCount = 0;
+
+  const agentMeta = {
+    general:  { name: 'General Agent',   icon: '🧠', color: '#5b6ef5' },
+    research: { name: 'Research Agent',  icon: '🔍', color: '#3ecf8e' },
+    code:     { name: 'Code Agent',      icon: '💻', color: '#7c8bff' },
+    writer:   { name: 'Writer Agent',    icon: '✍️', color: '#f59e0b' },
+    analyst:  { name: 'Analyst Agent',   icon: '📊', color: '#06b6d4' },
+    planner:  { name: 'Planner Agent',   icon: '🗂️', color: '#8b5cf6' },
+    memory:   { name: 'Memory Agent',    icon: '🧩', color: '#ec4899' },
+    vision:   { name: 'Vision Agent',    icon: '👁️', color: '#10b981' },
+    voice:    { name: 'Voice Agent',     icon: '🎙️', color: '#ef4444' },
+    tools:    { name: 'Tools Agent',     icon: '🔧', color: '#6b7280' },
+    security: { name: 'Security Agent',  icon: '🛡️', color: '#f97316' },
+  };
+
+  // Placeholder responses — replace with real API calls
+  const mockReplies = [
+    (agent, msg) => `Got it. I'm routing your request through the ${agent.name} pipeline. Stand by while I process: "${msg.slice(0, 60)}${msg.length > 60 ? '…' : ''}"`,
+    (agent)      => `${agent.icon} ${agent.name} here. I've received your task and I'm working on it now. I'll report back shortly with results.`,
+    (agent)      => `Acknowledged. Running the ${agent.name} workflow. This is where the real agent logic will hook in once the backend is wired up.`,
+  ];
+
+  // ── Agent switcher ─────────────────────────────────────────────────────
+  function selectAgent(el) {
+    document.querySelectorAll('.agent-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+    activeAgent = el.dataset.agent;
+    document.getElementById('msgInput').placeholder =
+      `Message the ${agentMeta[activeAgent].name}…`;
+  }
+
+  // ── Message rendering ──────────────────────────────────────────────────
+  function timestamp() {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function appendMessage(role, text, agentKey, subLabel) {
+    const history = document.getElementById('chatHistory');
+    const empty   = document.getElementById('emptyState');
+    if (empty) empty.remove();
+
+    const agent = agentMeta[agentKey || 'general'];
+    const isUser = role === 'user';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = `msg ${isUser ? 'user' : 'agent'}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = isUser ? '👤' : agent.icon;
+
+    const inner = document.createElement('div');
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+
+    if (isUser) {
+      meta.innerHTML = `<span class="meta-name">You</span><span>${timestamp()}</span>`;
+    } else {
+      meta.innerHTML = `
+        <span class="meta-name">${agent.name}</span>
+        ${subLabel ? `<span class="sub-badge">${subLabel}</span>` : ''}
+        <span>${timestamp()}</span>`;
+    }
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+
+    inner.appendChild(meta);
+    inner.appendChild(bubble);
+    wrapper.appendChild(avatar);
+    wrapper.appendChild(inner);
+    history.appendChild(wrapper);
+    history.scrollTop = history.scrollHeight;
+    return bubble;
+  }
+
+  function showThinking(agentKey) {
+    const history = document.getElementById('chatHistory');
+    const agent   = agentMeta[agentKey];
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'msg agent';
+    wrapper.id = 'thinking-indicator';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = agent.icon;
+
+    const thinking = document.createElement('div');
+    thinking.className = 'thinking';
+    thinking.innerHTML = `${agent.name} is thinking <div class="dots"><span></span><span></span><span></span></div>`;
+
+    wrapper.appendChild(avatar);
+    wrapper.appendChild(thinking);
+    history.appendChild(wrapper);
+    history.scrollTop = history.scrollHeight;
+  }
+
+  function removeThinking() {
+    const el = document.getElementById('thinking-indicator');
+    if (el) el.remove();
+  }
+
+  // ── Send logic ─────────────────────────────────────────────────────────
+  async function sendMessage() {
+    const input = document.getElementById('msgInput');
+    const text  = input.value.trim();
+    if (!text) return;
+
+    input.value = '';
+    autoResize(input);
+
+    appendMessage('user', text, activeAgent);
+    showThinking(activeAgent);
+
+    // TODO: replace this mock with a real fetch() to your agent backend
+    await simulateDelay(900 + Math.random() * 700);
+    removeThinking();
+
+    const reply = mockReplies[messageCount % mockReplies.length](agentMeta[activeAgent], text);
+    messageCount++;
+    appendMessage('agent', reply, activeAgent);
+  }
+
+  function sendSuggestion(chip) {
+    document.getElementById('msgInput').value = chip.textContent;
+    sendMessage();
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+  }
+
+  function simulateDelay(ms) {
+    return new Promise(r => setTimeout(r, ms));
+  }
+</script>
+</body>
+</html>
